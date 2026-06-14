@@ -24,6 +24,7 @@ except ImportError as e:
 BRUTES_DIR = "Brutes"
 CONCAT_DIR = "Concat"
 ARCHIVE_DIR = "Brutes_archive"
+SORTIE_DIR = "Sortie"
 TP_FILE = "TP/TP_test.xlsx"
 
 
@@ -32,6 +33,7 @@ def ensure_directories():
     os.makedirs(BRUTES_DIR, exist_ok=True)
     os.makedirs(CONCAT_DIR, exist_ok=True)
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    os.makedirs(SORTIE_DIR, exist_ok=True)
 
 
 def load_file(filepath):
@@ -84,6 +86,9 @@ def build_concat():
         if df.empty:
             print("ERREUR: DataFrame vide après chargement")
             return None
+        
+        # Formater les données pour éviter le format scientifique
+        df = format_dataframe(df)
         
         # Dédoublonnage
         initial_count = len(df)
@@ -286,6 +291,23 @@ def route_sms(concat_file, tp_df, output_file):
         return False
 
 
+def format_dataframe(df):
+    """Formater le DataFrame pour éviter le format scientifique"""
+    try:
+        # Convertir toutes les colonnes numériques en string si elles contiennent des MSISDN
+        for col in df.columns:
+            # Vérifier si la colonne contient des numéros de téléphone
+            if col in ['MSISDN APT', 'MSISDN APE', 'MSISDN']:
+                df[col] = df[col].apply(lambda x: f"{int(x)}" if pd.notna(x) and str(x).replace('.', '').isdigit() else str(x))
+            # Pour les autres colonnes numériques, formater sans notation scientifique
+            elif pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].apply(lambda x: f"{int(x)}" if pd.notna(x) and x == int(x) else (f"{x:.15f}".rstrip('0').rstrip('.') if pd.notna(x) else x))
+        return df
+    except Exception as e:
+        print(f"AVERTISSEMENT: Échec du formatage - {e}")
+        return df
+
+
 def get_latest_concat():
     """Récupérer le dernier fichier concaténé créé"""
     try:
@@ -341,7 +363,7 @@ def run_pipeline():
     # Étape 5: Créer les onglets et router les SMS
     print("\n[5/5] Création des onglets et routing SMS...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"TP_SMS_{ts}.xlsx"
+    output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
     sheet_map = create_tp_sheets(tp_df, output_file)
     
@@ -389,7 +411,7 @@ def run_from_existing_concat():
     # Créer les onglets et router les SMS
     print("\n[3/3] Création des onglets et routing SMS...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"TP_SMS_{ts}.xlsx"
+    output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
     sheet_map = create_tp_sheets(tp_df, output_file)
     

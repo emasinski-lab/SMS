@@ -12,7 +12,8 @@ SMS/
 │   └── sms_part_3.csv
 ├── TP/                      # Dossier du fichier TP
 │   └── TP_test.xlsx
-├── Concat/                  # Dossier de sortie (créé automatiquement)
+├── Concat/                  # Dossier des fichiers concaténés (créé automatiquement)
+├── Sortie/                  # Dossier des fichiers de sortie (créé automatiquement)
 ├── Brutes_archive/          # Archive des fichiers bruts (créé automatiquement)
 ├── Scripts/                 # Scripts originaux
 ├── main.py                  # Script principal
@@ -107,12 +108,13 @@ Généré dans `Concat/SMS_Concat_<timestamp>.xlsx`
 
 ### Fichier de sortie
 
-Généré dans `TP_SMS_<timestamp>.xlsx`
+Généré dans `Sortie/TP_SMS_<timestamp>.xlsx`
 - Un onglet par MSISDN du fichier TP
 - Nom des onglets: `Identité - MSISDN` (troncature à 31 caractères)
 - Chaque ligne de SMS est copiée dans:
   - L'onglet correspondant au MSISDN APT (expéditeur)
   - L'onglet correspondant au MSISDN APE (destinataire), si différent
+- **Format des valeurs**: Les numéros (MSISDN, etc.) sont formatés en texte pour éviter la notation scientifique
 
 ## Gestion des erreurs
 
