@@ -14,6 +14,9 @@ SMS/
 │   └── TP_test.xlsx
 ├── Reference/               # Dossier du fichier de référence
 │   └── msisdn_reference_v1.1.csv
+├── Error/                   # Dossier des fichiers d'erreur (créé automatiquement)
+│   ├── errorlog_<timestamp>.txt    # Log des erreurs
+│   └── SMS_error_<timestamp>.xlsx  # SMS en erreur (si applicable)
 ├── Concat/                  # Dossier des fichiers concaténés (créé automatiquement)
 ├── Sortie/                  # Dossier des fichiers de sortie (créé automatiquement)
 ├── Brutes_archive/          # Archive des fichiers bruts (créé automatiquement)
@@ -186,6 +189,66 @@ BANK-XYZ        | Pas de correspondance
 - Emplacement: `Reference/msisdn_reference_v1.1.csv`
 - Contient les préfixes, indicatifs et regex pour chaque pays
 - Peut être mis à jour sans modifier le script
+
+### Gestion des erreurs
+
+Le script génère automatiquement un **dossier `Error/`** contenant :
+
+1. **`errorlog_<timestamp>.txt`** - Fichier de log des erreurs
+   - Contient tous les messages d'erreur, avertissements et informations
+   - Format: `[timestamp] [type] message`
+   - Types: `INFO`, `AVERTISSEMENT`, `ERREUR`, `ERREUR_FATALE`
+
+2. **`SMS_error_<timestamp>.xlsx`** - Fichier des SMS en erreur (si applicable)
+   - Contient les SMS qui n'ont pas pu être traités
+   - Créé uniquement en cas d'erreur de traitement
+
+**Exemple de log:**
+```
+============================================================
+FICHIER DE LOG DES ERREURS
+============================================================
+Date de création: 2024-01-15 14:30:22
+============================================================
+
+[2024-01-15 14:30:22] [INFO] DEBUT DU PIPELINE SMS
+[2024-01-15 14:30:22] [INFO] Répertoires vérifiés/créés
+[2024-01-15 14:30:23] [INFO] Fichier concaténé créé: Concat/SMS_Concat_20240115_143022.xlsx
+[2024-01-15 14:30:23] [INFO] Fichiers Brutes archivés avec succès
+[2024-01-15 14:30:24] [INFO] Fichier TP chargé: 15 lignes
+[2024-01-15 14:30:25] [INFO] PIPELINE TERMINE AVEC SUCCES
+```
+
+**Affichage console:**
+```
+============================================================
+DEBUT DU PIPELINE SMS
+============================================================
+
+[1/5] Vérification des répertoires...
+
+[2/5] Concaténation des fichiers Brutes...
+Dédoublonnage: 5 doublons supprimés
+SUCCESS: Fichier concaténé créé - Concat/SMS_Concat_20240115_143022.xlsx
+
+[3/5] Archivage des fichiers Brutes...
+SUCCESS: Tous les fichiers Brutes archivés
+
+[4/5] Chargement du fichier TP...
+SUCCESS: Fichier TP chargé (15 lignes)
+
+[5/5] Création des onglets, routing SMS, statistiques et formatage...
+SUCCESS: Routing SMS terminé avec coloration
+SUCCESS: Fichier de référence chargé (1234 entrées)
+SUCCESS: Onglet Accueil créé avec statistiques pour 15 membres
+SUCCESS: Onglet PB_Format créé avec 45 MSISDN
+
+============================================================
+PIPELINE TERMINE AVEC SUCCES
+Fichier de sortie: Sortie/TP_SMS_20240115_143025.xlsx
+Fichier de log: Error/errorlog_20240115_143022.txt
+============================================================
+```
 
 ## Gestion des erreurs
 

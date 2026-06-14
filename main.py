@@ -31,9 +31,11 @@ BRUTES_DIR = "Brutes"
 CONCAT_DIR = "Concat"
 ARCHIVE_DIR = "Brutes_archive"
 SORTIE_DIR = "Sortie"
+ERROR_DIR = "Error"
 REFERENCE_DIR = "Reference"
 REFERENCE_FILE = os.path.join(REFERENCE_DIR, "msisdn_reference_v1.1.csv")
 TP_FILE = "TP/TP_test.xlsx"
+ERROR_LOG_FILE = None  # Sera défini lors de l'initialisation
 
 
 def ensure_directories():
@@ -43,6 +45,60 @@ def ensure_directories():
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(SORTIE_DIR, exist_ok=True)
     os.makedirs(REFERENCE_DIR, exist_ok=True)
+    os.makedirs(ERROR_DIR, exist_ok=True)
+
+
+def init_error_logging():
+    """Initialiser le fichier de log des erreurs"""
+    global ERROR_LOG_FILE
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ERROR_LOG_FILE = os.path.join(ERROR_DIR, f"errorlog_{ts}.txt")
+    
+    # Écrire l'en-tête
+    with open(ERROR_LOG_FILE, 'w', encoding='utf-8') as f:
+        f.write("=" * 60 + "\n")
+        f.write("FICHIER DE LOG DES ERREURS\n")
+        f.write("=" * 60 + "\n")
+        f.write(f"Date de création: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 60 + "\n\n")
+    
+    return ERROR_LOG_FILE
+
+
+def log_error(message, error_type="ERREUR", traceback_info=""):
+    """Logger une erreur dans le fichier de log"""
+    global ERROR_LOG_FILE
+    
+    if ERROR_LOG_FILE is None:
+        init_error_logging()
+    
+    try:
+        with open(ERROR_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{error_type}] {message}\n")
+            if traceback_info:
+                f.write(f"  Détails: {traceback_info}\n")
+            f.write("\n")
+    except Exception:
+        # Si on ne peut pas écrire dans le log, afficher à la console
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{error_type}] {message}")
+        if traceback_info:
+            print(f"  Détails: {traceback_info}")
+
+
+def save_error_sms(error_df, timestamp):
+    """Sauvegarder les SMS en erreur dans un fichier Excel"""
+    try:
+        if error_df is None or error_df.empty:
+            return None
+        
+        error_file = os.path.join(ERROR_DIR, f"SMS_error_{timestamp}.xlsx")
+        error_df.to_excel(error_file, index=False)
+        print(f"SUCCESS: Fichier d'erreur SMS créé - {error_file}")
+        log_error(f"Fichier SMS_error créé: {error_file} avec {len(error_df)} lignes en erreur")
+        return error_file
+    except Exception as e:
+        log_error(f"Échec de la sauvegarde des SMS en erreur: {e}")
+        return None
 
 
 def load_file(filepath):
@@ -638,34 +694,53 @@ def get_latest_concat():
 
 def run_pipeline():
     """Exécuter le pipeline complet"""
+    global ERROR_LOG_FILE
+    
+    # Initialiser le logging des erreurs
+    ts_start = datetime.now().strftime("%Y%m%d_%H%M%S")
+    init_error_logging()
+    
     print("=" * 60)
     print("DEBUT DU PIPELINE SMS")
     print("=" * 60)
+    log_error("DEBUT DU PIPELINE SMS", "INFO")
     
     # Étape 1: Vérifier/créer les répertoires
     print("\n[1/5] Vérification des répertoires...")
     ensure_directories()
+    log_error("Répertoires vérifiés/créés", "INFO")
     
     # Étape 2: Concaténer les fichiers Brutes
     print("\n[2/5] Concaténation des fichiers Brutes...")
     concat_file = build_concat()
     
     if concat_file is None:
-        print("ERREUR FATALE: Impossible de créer le fichier concaténé")
+        error_msg = "ERREUR FATALE: Impossible de créer le fichier concaténé"
+        print(error_msg)
+        log_error(error_msg, "ERREUR_FATALE")
         return False
+    
+    log_error(f"Fichier concaténé créé: {concat_file}", "INFO")
     
     # Étape 3: Archiver les fichiers Brutes
     print("\n[3/5] Archivage des fichiers Brutes...")
     if not archive_brutes():
         print("AVERTISSEMENT: L'archivage a échoué, continuation...")
+        log_error("Archivage des fichiers Brutes échoué", "AVERTISSEMENT")
+    else:
+        log_error("Fichiers Brutes archivés avec succès", "INFO")
     
     # Étape 4: Charger le fichier TP
     print("\n[4/5] Chargement du fichier TP...")
     tp_df = load_tp_file()
     
     if tp_df is None:
-        print("ERREUR FATALE: Impossible de charger le fichier TP")
+        error_msg = "ERREUR FATALE: Impossible de charger le fichier TP"
+        print(error_msg)
+        log_error(error_msg, "ERREUR_FATALE")
         return False
+    
+    log_error(f"Fichier TP chargé: {len(tp_df)} lignes", "INFO")
     
     # Étape 5: Créer les onglets, routing SMS, statistiques et formatage
     print("\n[5/5] Création des onglets, routing SMS, statistiques et formatage...")
@@ -711,35 +786,52 @@ def run_pipeline():
     print("\n" + "=" * 60)
     print("PIPELINE TERMINE AVEC SUCCES")
     print(f"Fichier de sortie: {output_file}")
+    if ERROR_LOG_FILE:
+        print(f"Fichier de log: {ERROR_LOG_FILE}")
     print("=" * 60)
     
+    log_error("PIPELINE TERMINE AVEC SUCCES", "INFO")
     return True
 
 
 def run_from_existing_concat():
     """Exécuter à partir du dernier fichier concat existant"""
+    global ERROR_LOG_FILE
+    
+    # Initialiser le logging des erreurs
+    ts_start = datetime.now().strftime("%Y%m%d_%H%M%S")
+    init_error_logging()
+    
     print("=" * 60)
     print("DEBUT DU TRAITEMENT A PARTIR DU DERNIER CONCAT")
     print("=" * 60)
+    log_error("DEBUT DU TRAITEMENT A PARTIR DU DERNIER CONCAT", "INFO")
     
     # Récupérer le dernier concat
     print("\n[1/3] Recherche du dernier fichier concaténé...")
     concat_file = get_latest_concat()
     
     if concat_file is None:
-        print("ERREUR: Aucun fichier concaténé trouvé dans {CONCAT_DIR}")
+        error_msg = f"ERREUR: Aucun fichier concaténé trouvé dans {CONCAT_DIR}"
+        print(error_msg)
         print("Exécutez d'abord run_pipeline() pour créer un fichier concaténé")
+        log_error(error_msg, "ERREUR")
         return False
     
     print(f"Dernier concat trouvé: {concat_file}")
+    log_error(f"Dernier concat utilisé: {concat_file}", "INFO")
     
     # Charger le fichier TP
     print("\n[2/3] Chargement du fichier TP...")
     tp_df = load_tp_file()
     
     if tp_df is None:
-        print("ERREUR FATALE: Impossible de charger le fichier TP")
+        error_msg = "ERREUR FATALE: Impossible de charger le fichier TP"
+        print(error_msg)
+        log_error(error_msg, "ERREUR_FATALE")
         return False
+    
+    log_error(f"Fichier TP chargé: {len(tp_df)} lignes", "INFO")
     
     # Créer les onglets et router les SMS
     print("\n[3/3] Création des onglets, routing SMS, statistiques et formatage...")
@@ -785,8 +877,11 @@ def run_from_existing_concat():
     print("\n" + "=" * 60)
     print("TRAITEMENT TERMINE AVEC SUCCES")
     print(f"Fichier de sortie: {output_file}")
+    if ERROR_LOG_FILE:
+        print(f"Fichier de log: {ERROR_LOG_FILE}")
     print("=" * 60)
     
+    log_error("TRAITEMENT TERMINE AVEC SUCCES", "INFO")
     return True
 
 
