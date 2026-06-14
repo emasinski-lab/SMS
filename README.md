@@ -116,6 +116,21 @@ Généré dans `Sortie/TP_SMS_<timestamp>.xlsx`
   - L'onglet correspondant au MSISDN APE (destinataire), si différent
 - **Format des valeurs**: Les numéros (MSISDN, etc.) sont formatés en texte pour éviter la notation scientifique
 
+### Colorisation des onglets
+
+Pour une **visualisation rapide des relations**, les MSISDN sont colorés:
+
+- **🟡 JAUNE**: Le MSISDN correspond au MSISDN de l'onglet (correspondance directe)
+  - Exemple: Dans l'onglet "Dupont Jean - 33612345678", la cellule contenant `33612345678` sera en jaune
+
+- **🔴 ROUGE**: Le MSISDN est un autre membre du TP (relation entre membres)
+  - Exemple: Dans l'onglet "Dupont Jean - 33612345678", si un SMS contient `33623456789` (qui est dans le TP), cette cellule sera en rouge
+
+Cette coloration permet d'identifier **en un coup d'œil** quels SMS impliquent:
+- Le propriétaire de l'onglet (jaune)
+- D'autres membres du TP (rouge)
+- Des numéros externes (non colorés)
+
 ## Gestion des erreurs
 
 Le script gère les erreurs suivantes:

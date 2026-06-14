@@ -15,10 +15,16 @@ from datetime import datetime
 try:
     import pandas as pd
     from openpyxl import Workbook, load_workbook
+    from openpyxl.styles import PatternFill
+    from openpyxl.utils import get_column_letter
 except ImportError as e:
     print(f"ERREUR: Dépendance manquante - {e}")
     print("Installation requise: pip install pandas openpyxl")
     sys.exit(1)
+
+# Styles pour la coloration
+YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+RED_FILL = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 
 # Configuration
 BRUTES_DIR = "Brutes"
@@ -232,7 +238,7 @@ def create_tp_sheets(tp_df, output_file):
 
 
 def route_sms(concat_file, tp_df, output_file):
-    """Router les SMS dans les onglets correspondants"""
+    """Router les SMS dans les onglets correspondants avec coloration"""
     try:
         # Charger le fichier concaténé
         df = pd.read_excel(concat_file)
@@ -257,6 +263,9 @@ def route_sms(concat_file, tp_df, output_file):
                     msisdn_to_sheet[row["MSISDN"]] = real_name
                     break
         
+        # Créer le set de tous les MSISDN du TP pour vérification
+        all_tp_msisdns = set(tp_df['MSISDN'].astype(str))
+        
         print(f"Mapping MSISDN -> Onglets: {len(msisdn_to_sheet)} entrées")
         
         # Parser chaque ligne et copier dans les onglets
@@ -274,21 +283,79 @@ def route_sms(concat_file, tp_df, output_file):
             
             # Écrire dans APT si présent dans TP
             if apt in msisdn_to_sheet:
-                ws = wb[msisdn_to_sheet[apt]]
-                ws.append(row_data)
+                sheet_name = msisdn_to_sheet[apt]
+                ws = wb[sheet_name]
+                new_row = ws.max_row + 1
+                for col_idx, value in enumerate(row_data, start=1):
+                    ws.cell(row=new_row, column=col_idx, value=value)
+                
+                # Appliquer la coloration pour cette ligne
+                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns)
             
             # Écrire dans APE si différent et présent dans TP
             if ape in msisdn_to_sheet and ape != apt:
-                ws = wb[msisdn_to_sheet[ape]]
-                ws.append(row_data)
+                sheet_name = msisdn_to_sheet[ape]
+                ws = wb[sheet_name]
+                new_row = ws.max_row + 1
+                for col_idx, value in enumerate(row_data, start=1):
+                    ws.cell(row=new_row, column=col_idx, value=value)
+                
+                # Appliquer la coloration pour cette ligne
+                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns)
         
         wb.save(output_file)
-        print(f"SUCCESS: Routing SMS terminé - {output_file}")
+        print(f"SUCCESS: Routing SMS terminé avec coloration - {output_file}")
         return True
         
     except Exception as e:
         print(f"ERREUR: Échec du routing SMS - {e}")
         return False
+
+
+def apply_coloration(ws, row_num, apt, ape, all_tp_msisdns):
+    """Appliquer la coloration aux cellules MSISDN de la ligne
+    
+    Args:
+        ws: Worksheet openpyxl
+        row_num: Numéro de la ligne
+        apt: MSISDN APT de la ligne
+        ape: MSISDN APE de la ligne
+        all_tp_msisdns: Set de tous les MSISDN du TP
+    """
+    try:
+        # Trouver les colonnes MSISDN APT et MSISDN APE (colonne 2 et 3)
+        apt_col = 2  # MSISDN APT
+        ape_col = 3  # MSISDN APE
+        
+        # Extraire le MSISDN de l'onglet à partir du nom
+        # Format: "Identité - MSISDN"
+        sheet_msisdn = None
+        if " - " in ws.title:
+            sheet_msisdn = ws.title.split(" - ")[-1].strip()
+        
+        if sheet_msisdn is None:
+            return
+        
+        # Vérifier et colorer MSISDN APT
+        apt_cell = ws.cell(row=row_num, column=apt_col)
+        if str(apt) == str(sheet_msisdn):
+            # Jaune: correspond au MSISDN de l'onglet
+            apt_cell.fill = YELLOW_FILL
+        elif str(apt) in all_tp_msisdns:
+            # Rouge: autre MSISDN du TP
+            apt_cell.fill = RED_FILL
+        
+        # Vérifier et colorer MSISDN APE
+        ape_cell = ws.cell(row=row_num, column=ape_col)
+        if str(ape) == str(sheet_msisdn):
+            # Jaune: correspond au MSISDN de l'onglet
+            ape_cell.fill = YELLOW_FILL
+        elif str(ape) in all_tp_msisdns:
+            # Rouge: autre MSISDN du TP
+            ape_cell.fill = RED_FILL
+            
+    except Exception as e:
+        print(f"AVERTISSEMENT: Échec de la coloration - {e}")
 
 
 def format_dataframe(df):
