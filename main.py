@@ -483,21 +483,46 @@ def route_sms(concat_file, tp_df, output_file):
         
         # Créer le mapping MSISDN -> nom d'onglet
         msisdn_to_sheet = {}
-        for _, row in tp_df.iterrows():
-            sheet_name = f"{row['Identité']} - {row['MSISDN']}"[:31]
-            # Trouver le nom réel (peut avoir été modifié pour les doublons)
-            for real_name in wb.sheetnames:
-                if real_name.startswith(sheet_name):
-                    msisdn_to_sheet[row["MSISDN"]] = real_name
-                    break
-        
-        # Créer le set de tous les MSISDN du TP pour vérification
         all_tp_msisdns = set(tp_df['MSISDN'].astype(str))
         
+        for _, row in tp_df.iterrows():
+            msisdn = str(row["MSISDN"])
+            # Générer le nom de base
+            base_name = f"{row['Identité']} - {msisdn}"[:31]
+            
+            # Trouver le nom réel dans le workbook (peut avoir été modifié pour les doublons)
+            found = False
+            for real_name in wb.sheetnames:
+                # Vérifier si le nom réel commence par le nom de base
+                if real_name.startswith(base_name):
+                    msisdn_to_sheet[msisdn] = real_name
+                    found = True
+                    break
+            
+            if not found:
+                # Si pas trouvé, essayer avec une correspondance partielle
+                for real_name in wb.sheetnames:
+                    if msisdn in real_name:
+                        msisdn_to_sheet[msisdn] = real_name
+                        found = True
+                        break
+            
+            if not found:
+                print(f"AVERTISSEMENT: Aucun onglet trouvé pour MSISDN {msisdn} (nom attendu: {base_name})")
+                log_error(f"Aucun onglet trouvé pour MSISDN {msisdn}", "AVERTISSEMENT")
+        
         print(f"Mapping MSISDN -> Onglets: {len(msisdn_to_sheet)} entrées")
+        print(f"MSISDN du TP: {len(all_tp_msisdns)} entrées")
         
         # Parser chaque ligne et copier dans les onglets
-        for _, row in df.iterrows():
+        total_rows = len(df)
+        print(f"Traitement de {total_rows} SMS...")
+        
+        for idx, (_, row) in enumerate(df.iterrows(), start=1):
+            # Afficher la progression toutes les 1000 lignes
+            if idx % 1000 == 0:
+                print(f"  Traité: {idx}/{total_rows} SMS...")
+            
             apt = str(row["MSISDN APT"])
             ape = str(row["MSISDN APE"])
             
@@ -533,6 +558,7 @@ def route_sms(concat_file, tp_df, output_file):
         
         wb.save(output_file)
         print(f"SUCCESS: Routing SMS terminé avec coloration - {output_file}")
+        print(f"  {total_rows} SMS traités")
         return True, df
         
     except Exception as e:
