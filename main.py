@@ -309,6 +309,8 @@ def create_pb_format_sheet(wb, concat_df, ref_df):
         ref_df: DataFrame du fichier de référence
     """
     try:
+        import openpyxl
+        
         # Extraire tous les MSISDN uniques des colonnes APT et APE
         all_msisdns = set()
         
@@ -370,10 +372,17 @@ def create_accueil_sheet(wb, tp_df, concat_df):
         # Créer l'onglet Accueil (en premier)
         if 'Accueil' in wb.sheetnames:
             ws = wb['Accueil']
+            # Supprimer l'ancien onglet pour le recréer
+            wb.remove(ws)
+        
+        # Créer un nouvel onglet Accueil
+        ws = wb.create_sheet(title="Accueil")
+        # Déplacer en premier (compatible avec openpyxl 3.0+)
+        if hasattr(wb, 'move_sheet'):
+            wb.move_sheet(ws, offset=-len(wb.sheetnames) + 1)
         else:
-            ws = wb.create_sheet(title="Accueil")
-            # Déplacer en premier
-            wb.move_endsheet(ws, offset=-len(wb.sheetnames) + 1)
+            # Ancienne méthode pour les versions plus anciennes
+            wb._sheets.insert(0, wb._sheets.pop(wb._sheets.index(ws)))
         
         # Écrire l'en-tête
         headers = [
