@@ -507,18 +507,25 @@ def create_accueil_sheet(wb, tp_df, concat_df):
         return False
 
 
-def route_sms(concat_file, tp_df, output_file):
+def route_sms(concat_file, tp_df, output_file, concat_df=None):
     """Router les SMS dans les onglets correspondants avec coloration
+    
+    Args:
+        concat_file: Chemin du fichier concaténé
+        tp_df: DataFrame du TP
+        output_file: Chemin du fichier de sortie
+        concat_df: DataFrame concaténé optionnel (pour éviter de recharger)
     
     Returns:
         tuple: (success: bool, concat_df: DataFrame or None)
     """
     try:
-        # Charger le fichier concaténé
-        df = pd.read_excel(concat_file)
-        
-        # Formater pour éviter le format scientifique
-        df = format_dataframe(df)
+        # Charger le fichier concaténé si non fourni
+        if concat_df is None:
+            df = pd.read_excel(concat_file)
+            df = format_dataframe(df)
+        else:
+            df = concat_df
         
         # Vérifier les colonnes requises
         required_cols = ['ActionDate', 'MSISDN APT', 'MSISDN APE', 'Preview', 'Traduction']
@@ -707,7 +714,7 @@ def format_msisdn(msisdn, ref_df):
         ref_df: DataFrame du fichier de référence
     
     Returns:
-        str: MSISDN formaté ou "Pas de correspondance"
+        str: MSISDN formaté selon E.164 ou "Pas de correspondance"
     """
     try:
         if not isinstance(msisdn, str) or not msisdn.strip():
@@ -716,43 +723,55 @@ def format_msisdn(msisdn, ref_df):
         # Nettoyer le MSISDN (enlever espaces, +, etc.)
         clean_msisdn = msisdn.strip().replace(" ", "").replace("+", "").replace("-", "").replace("(", "").replace(")", "")
         
+        # Si ce n'est pas un nombre, retourner "Pas de correspondance"
         if not clean_msisdn.isdigit():
             return "Pas de correspondance"
         
-        # Trouver le préfixe qui correspond
+        # Trouver le préfixe qui correspond (en triant par longueur décroissante pour éviter les conflits)
+        # Créer une liste de (préfixe, indicatif, regex, min_len, max_len) triée par longueur de préfixe
+        prefixes_data = []
         for _, row in ref_df.iterrows():
             prefix = str(row['E164_prefixe_num'])
+            indicatif = str(row['Indicatif'])
             regex_sans_plus = row.get('regex_E164_sans_plus', '')
-            
+            min_len = int(row['MSISDN_len_min']) if 'MSISDN_len_min' in row and pd.notna(row['MSISDN_len_min']) else 1
+            max_len = int(row['MSISDN_len_max']) if 'MSISDN_len_max' in row and pd.notna(row['MSISDN_len_max']) else 20
+            prefixes_data.append((prefix, indicatif, regex_sans_plus, min_len, max_len))
+        
+        # Trier par longueur de préfixe (plus long d'abord) pour éviter les conflits
+        prefixes_data.sort(key=lambda x: len(x[0]), reverse=True)
+        
+        for prefix, indicatif, regex_sans_plus, min_len, max_len in prefixes_data:
             # Vérifier si le MSISDN commence par ce préfixe
             if clean_msisdn.startswith(prefix):
+                # Calculer la longueur du numéro sans le préfixe
+                number_part = clean_msisdn[len(prefix):]
+                number_len = len(number_part)
+                
+                # Vérifier la longueur
+                if number_len < min_len or number_len > max_len:
+                    continue
+                
                 # Vérifier avec regex si disponible
                 if regex_sans_plus:
                     import re
                     if re.match(regex_sans_plus, clean_msisdn):
-                        # Formater en E.164: +<indicatif><numéro>
-                        indicatif = str(row['Indicatif'])
-                        return f"+{indicatif}{clean_msisdn[len(prefix):]}"
+                        # Formater en E.164: +<indicatif><numéro sans préfixe>
+                        return f"+{indicatif}{number_part}"
                 else:
-                    # Formater sans regex
-                    indicatif = str(row['Indicatif'])
-                    return f"+{indicatif}{clean_msisdn[len(prefix):]}"
+                    # Formater sans regex (en supposant que c'est valide)
+                    return f"+{indicatif}{number_part}"
         
-        # Si aucun préfixe ne correspond, essayer de deviner le format
-        # en ajoutant un + devant si ce n'est pas déjà fait
-        if clean_msisdn.startswith('0'):
-            # Numéro local, on ne peut pas formater sans connaître le pays
-            return "Pas de correspondance"
-        
-        # Essayer de formater comme un numéro international
-        if len(clean_msisdn) >= 10:
-            # Supposer que c'est déjà un numéro international
+        # Si aucun préfixe ne correspond, essayer de formater comme numéro international
+        # en ajoutant un + devant
+        if len(clean_msisdn) >= 8:  # Longueur minimale raisonnable pour un numéro international
             return f"+{clean_msisdn}"
         
         return "Pas de correspondance"
         
     except Exception as e:
-        print(f"AVERTISSEMENT: Échec du formatage de {msisdn} - {e}")
+        if VERBOSE:
+            print(f"AVERTISSEMENT: Échec du formatage de {msisdn} - {e}")
         return "Pas de correspondance"
 
 
@@ -849,18 +868,18 @@ def run_pipeline():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
+    # Charger le concat pour les statistiques et le routing
+    concat_df = pd.read_excel(concat_file)
+    concat_df = format_dataframe(concat_df)
+    
     sheet_map = create_tp_sheets(tp_df, output_file)
     
     if sheet_map is None:
         print("ERREUR FATALE: Impossible de créer les onglets TP")
         return False
     
-    # Charger le concat pour les statistiques
-    concat_df = pd.read_excel(concat_file)
-    concat_df = format_dataframe(concat_df)
-    
-    # Router les SMS
-    success, _ = route_sms(concat_file, tp_df, output_file)
+    # Router les SMS (passe concat_df pour éviter de recharger)
+    success, _ = route_sms(concat_file, tp_df, output_file, concat_df)
     
     if not success:
         print("ERREUR FATALE: Le routing SMS a échoué")
@@ -954,8 +973,8 @@ def run_from_existing_concat():
     concat_df = pd.read_excel(concat_file)
     concat_df = format_dataframe(concat_df)
     
-    # Router les SMS
-    success, _ = route_sms(concat_file, tp_df, output_file)
+    # Router les SMS (passe concat_df pour éviter de recharger)
+    success, _ = route_sms(concat_file, tp_df, output_file, concat_df)
     
     if not success:
         print("ERREUR FATALE: Le routing SMS a échoué")
