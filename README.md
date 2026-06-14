@@ -61,6 +61,20 @@ Ce mode:
 - Crée un fichier Excel avec un onglet par MSISDN du fichier TP
 - Route les SMS dans les onglets correspondants
 
+**Comportement intelligent:**
+- Si le dossier `Brutes/` est **vide**, le script bascule automatiquement sur le **dernier fichier concaténé** existant dans `Concat/`
+- Dans ce cas, l'archivage est sauté (pas de fichiers à archiver)
+- Le traitement continue normalement avec les fonctions d'analyse (Accueil, PB_Format, coloration)
+
+Exemple:
+```
+[2/5] Concaténation des fichiers Brutes...
+AVERTISSEMENT: Dossier Brutes vide, recherche du dernier concat existant...
+Dernier concat trouvé: Concat/SMS_Concat_20240115_143022.xlsx
+
+[3/5] Archivage des fichiers Brutes: non nécessaire (mode analyse)
+```
+
 ### 2. Traitement à partir du dernier concat existant
 
 ```bash

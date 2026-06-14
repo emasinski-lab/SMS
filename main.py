@@ -715,20 +715,37 @@ def run_pipeline():
     concat_file = build_concat()
     
     if concat_file is None:
-        error_msg = "ERREUR FATALE: Impossible de créer le fichier concaténé"
-        print(error_msg)
-        log_error(error_msg, "ERREUR_FATALE")
-        return False
-    
-    log_error(f"Fichier concaténé créé: {concat_file}", "INFO")
-    
-    # Étape 3: Archiver les fichiers Brutes
-    print("\n[3/5] Archivage des fichiers Brutes...")
-    if not archive_brutes():
-        print("AVERTISSEMENT: L'archivage a échoué, continuation...")
-        log_error("Archivage des fichiers Brutes échoué", "AVERTISSEMENT")
+        # Si le dossier Brutes est vide, essayer d'utiliser le dernier concat existant
+        print("AVERTISSEMENT: Dossier Brutes vide, recherche du dernier concat existant...")
+        log_error("Dossier Brutes vide, tentative de bascule sur le dernier concat", "AVERTISSEMENT")
+        
+        last_concat = get_latest_concat()
+        if last_concat is not None:
+            print(f"Dernier concat trouvé: {last_concat}")
+            log_error(f"Utilisation du dernier concat: {last_concat}", "INFO")
+            concat_file = last_concat
+            # Ne pas archiver car on utilise un concat existant
+            archive_brutes_done = False
+        else:
+            error_msg = "ERREUR FATALE: Impossible de créer le fichier concaténé et aucun concat existant trouvé"
+            print(error_msg)
+            log_error(error_msg, "ERREUR_FATALE")
+            return False
     else:
-        log_error("Fichiers Brutes archivés avec succès", "INFO")
+        log_error(f"Fichier concaténé créé: {concat_file}", "INFO")
+        archive_brutes_done = True
+    
+    # Étape 3: Archiver les fichiers Brutes (uniquement si on a créé un nouveau concat)
+    if archive_brutes_done:
+        print("\n[3/5] Archivage des fichiers Brutes...")
+        if not archive_brutes():
+            print("AVERTISSEMENT: L'archivage a échoué, continuation...")
+            log_error("Archivage des fichiers Brutes échoué", "AVERTISSEMENT")
+        else:
+            log_error("Fichiers Brutes archivés avec succès", "INFO")
+    else:
+        print("\n[3/5] Archivage des fichiers Brutes: non nécessaire (mode analyse)")
+        log_error("Archivage sauté: utilisation d'un concat existant", "INFO")
     
     # Étape 4: Charger le fichier TP
     print("\n[4/5] Chargement du fichier TP...")
