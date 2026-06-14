@@ -197,7 +197,7 @@ def load_tp_file(tp_path=TP_FILE):
 
 
 def create_tp_sheets(tp_df, output_file):
-    """Créer un fichier Excel avec un onglet par MSISDN du TP"""
+    """Créer un fichier Excel avec un onglet par MSISDN du TP + onglet Accueil"""
     try:
         wb = Workbook()
         
@@ -237,18 +237,125 @@ def create_tp_sheets(tp_df, output_file):
         return None
 
 
+def create_accueil_sheet(wb, tp_df, concat_df):
+    """Créer l'onglet Accueil avec les statistiques pour chaque membre du TP
+    
+    Args:
+        wb: Workbook openpyxl
+        tp_df: DataFrame du TP
+        concat_df: DataFrame concaténé des SMS
+    """
+    try:
+        # Créer l'onglet Accueil (en premier)
+        if 'Accueil' in wb.sheetnames:
+            ws = wb['Accueil']
+        else:
+            ws = wb.create_sheet(title="Accueil")
+            # Déplacer en premier
+            wb.move_endsheet(ws, offset=-len(wb.sheetnames) + 1)
+        
+        # Écrire l'en-tête
+        headers = [
+            "Identité",
+            "MSISDN",
+            "Statut",
+            "SMS reçus",
+            "Correspondants uniques",
+            "Détails correspondants"
+        ]
+        ws.append(headers)
+        
+        # Appliquer le style d'en-tête
+        for cell in ws[1]:
+            cell.font = openpyxl.styles.Font(bold=True)
+        
+        # Analyser les SMS pour chaque membre du TP
+        for _, tp_row in tp_df.iterrows():
+            msisdn = str(tp_row['MSISDN'])
+            identite = tp_row['Identité']
+            
+            # Filtrer les SMS où ce MSISDN apparaît (APT ou APE)
+            sms_filtered = concat_df[
+                (concat_df['MSISDN APT'].astype(str) == msisdn) |
+                (concat_df['MSISDN APE'].astype(str) == msisdn)
+            ]
+            
+            # Calculer les statistiques
+            nb_sms = len(sms_filtered)
+            
+            # Trouver les correspondants uniques (tous les MSISDN en contact)
+            correspondants = set()
+            for _, row in sms_filtered.iterrows():
+                apt = str(row['MSISDN APT'])
+                ape = str(row['MSISDN APE'])
+                if apt != msisdn:
+                    correspondants.add(apt)
+                if ape != msisdn:
+                    correspondants.add(ape)
+            
+            # Filtrer pour ne garder que les correspondants du TP
+            tp_msisdns = set(tp_df['MSISDN'].astype(str))
+            correspondants_tp = correspondants & tp_msisdns
+            correspondants_externes = correspondants - tp_msisdns
+            
+            nb_correspondants = len(correspondants)
+            
+            # Déterminer le statut
+            if nb_sms > 0:
+                statut = "Détecté"
+            else:
+                statut = "Non détecté"
+            
+            # Créer la liste des correspondants (pour la colonne Détails)
+            details = ", ".join(sorted(correspondants_tp)) if correspondants_tp else "Aucun"
+            if correspondants_externes:
+                details += f" (+{len(correspondants_externes)} externes)"
+            
+            # Écrire la ligne
+            ws.append([
+                identite,
+                msisdn,
+                statut,
+                nb_sms,
+                nb_correspondants,
+                details
+            ])
+        
+        # Ajuster la largeur des colonnes
+        ws.column_dimensions['A'].width = 20  # Identité
+        ws.column_dimensions['B'].width = 15  # MSISDN
+        ws.column_dimensions['C'].width = 12  # Statut
+        ws.column_dimensions['D'].width = 12  # SMS reçus
+        ws.column_dimensions['E'].width = 20  # Correspondants uniques
+        ws.column_dimensions['F'].width = 40  # Détails correspondants
+        
+        print(f"SUCCESS: Onglet Accueil créé avec statistiques pour {len(tp_df)} membres")
+        return True
+        
+    except Exception as e:
+        print(f"ERREUR: Échec de la création de l'onglet Accueil - {e}")
+        return False
+
+
 def route_sms(concat_file, tp_df, output_file):
-    """Router les SMS dans les onglets correspondants avec coloration"""
+    """Router les SMS dans les onglets correspondants avec coloration
+    
+    Returns:
+        tuple: (success: bool, concat_df: DataFrame or None)
+    """
     try:
         # Charger le fichier concaténé
         df = pd.read_excel(concat_file)
+        
+        # Formater pour éviter le format scientifique
+        df = format_dataframe(df)
         
         # Vérifier les colonnes requises
         required_cols = ['ActionDate', 'MSISDN APT', 'MSISDN APE', 'Preview', 'Traduction']
         for col in required_cols:
             if col not in df.columns:
                 print(f"ERREUR: Colonne manquante dans concat - {col}")
-                return False
+                return False, None
         
         # Charger le workbook de sortie
         wb = load_workbook(output_file)
@@ -305,11 +412,11 @@ def route_sms(concat_file, tp_df, output_file):
         
         wb.save(output_file)
         print(f"SUCCESS: Routing SMS terminé avec coloration - {output_file}")
-        return True
+        return True, df
         
     except Exception as e:
         print(f"ERREUR: Échec du routing SMS - {e}")
-        return False
+        return False, None
 
 
 def apply_coloration(ws, row_num, apt, ape, all_tp_msisdns):
@@ -428,7 +535,7 @@ def run_pipeline():
         return False
     
     # Étape 5: Créer les onglets et router les SMS
-    print("\n[5/5] Création des onglets et routing SMS...")
+    print("\n[5/5] Création des onglets, routing SMS et statistiques...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
@@ -438,9 +545,23 @@ def run_pipeline():
         print("ERREUR FATALE: Impossible de créer les onglets TP")
         return False
     
-    if not route_sms(concat_file, tp_df, output_file):
+    # Charger le concat pour les statistiques
+    concat_df = pd.read_excel(concat_file)
+    concat_df = format_dataframe(concat_df)
+    
+    # Router les SMS
+    success, _ = route_sms(concat_file, tp_df, output_file)
+    
+    if not success:
         print("ERREUR FATALE: Le routing SMS a échoué")
         return False
+    
+    # Créer l'onglet Accueil avec les statistiques
+    wb = load_workbook(output_file)
+    if not create_accueil_sheet(wb, tp_df, concat_df):
+        print("AVERTISSEMENT: Impossible de créer l'onglet Accueil")
+    else:
+        wb.save(output_file)
     
     print("\n" + "=" * 60)
     print("PIPELINE TERMINE AVEC SUCCES")
@@ -476,7 +597,7 @@ def run_from_existing_concat():
         return False
     
     # Créer les onglets et router les SMS
-    print("\n[3/3] Création des onglets et routing SMS...")
+    print("\n[3/3] Création des onglets, routing SMS et statistiques...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
@@ -486,9 +607,23 @@ def run_from_existing_concat():
         print("ERREUR FATALE: Impossible de créer les onglets TP")
         return False
     
-    if not route_sms(concat_file, tp_df, output_file):
+    # Charger le concat pour les statistiques
+    concat_df = pd.read_excel(concat_file)
+    concat_df = format_dataframe(concat_df)
+    
+    # Router les SMS
+    success, _ = route_sms(concat_file, tp_df, output_file)
+    
+    if not success:
         print("ERREUR FATALE: Le routing SMS a échoué")
         return False
+    
+    # Créer l'onglet Accueil avec les statistiques
+    wb = load_workbook(output_file)
+    if not create_accueil_sheet(wb, tp_df, concat_df):
+        print("AVERTISSEMENT: Impossible de créer l'onglet Accueil")
+    else:
+        wb.save(output_file)
     
     print("\n" + "=" * 60)
     print("TRAITEMENT TERMINE AVEC SUCCES")

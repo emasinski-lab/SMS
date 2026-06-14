@@ -131,6 +131,30 @@ Cette coloration permet d'identifier **en un coup d'œil** quels SMS impliquent:
 - D'autres membres du TP (rouge)
 - Des numéros externes (non colorés)
 
+### Onglet Accueil - Statistiques
+
+Le fichier de sortie contient un **onglet "Accueil"** en première position avec les statistiques suivantes pour chaque membre du TP:
+
+| Colonne | Description |
+|---------|-------------|
+| **Identité** | Nom de la personne |
+| **MSISDN** | Numéro de téléphone |
+| **Statut** | Détecté / Non détecté (si le MSISDN apparaît dans les SMS) |
+| **SMS reçus** | Nombre total de SMS où le MSISDN est expéditeur (APT) ou destinataire (APE) |
+| **Correspondants uniques** | Nombre de numéros différents avec qui la personne a échangé |
+| **Détails correspondants** | Liste des correspondants du TP + nombre de correspondants externes |
+
+**Exemple:**
+```
+Identité      | MSISDN      | Statut   | SMS reçus | Correspondants uniques | Détails correspondants
+-------------|-------------|----------|-----------|------------------------|--------------------------
+Dupont Jean   | 33612345678 | Détecté  | 15        | 5                      | 33623456789, 33634567890 (+2 externes)
+Dupont Marie  | 33623456789 | Détecté  | 8         | 3                      | 33612345678, 34612345678
+Martin Carlos | 34612345678 | Non détecté | 0         | 0                      | Aucun
+```
+
+Cet onglet permet d'avoir **une vue d'ensemble** de l'activité SMS de chaque membre du TP.
+
 ## Gestion des erreurs
 
 Le script gère les erreurs suivantes:
