@@ -92,17 +92,29 @@ def log_error(message, error_type="ERREUR", traceback_info=""):
             print(f"  Détails: {traceback_info}")
 
 
-def save_error_sms(error_df, timestamp):
-    """Sauvegarder les SMS en erreur dans un fichier Excel"""
+def save_error_sms(error_df, timestamp, force_empty=False):
+    """Sauvegarder les SMS en erreur dans un fichier Excel
+    
+    Args:
+        error_df: DataFrame des SMS en erreur
+        timestamp: Timestamp pour le nom de fichier
+        force_empty: Si True, crée le fichier même s'il est vide
+    """
     try:
-        if error_df is None or error_df.empty:
-            return None
-        
         error_file = os.path.join(ERROR_DIR, f"SMS_error_{timestamp}.xlsx")
-        error_df.to_excel(error_file, index=False)
-        print(f"SUCCESS: Fichier d'erreur SMS créé - {error_file}")
-        log_error(f"Fichier SMS_error créé: {error_file} avec {len(error_df)} lignes en erreur")
-        return error_file
+        
+        # Toujours créer le fichier si force_empty=True, même s'il est vide
+        if force_empty or (error_df is not None and not error_df.empty):
+            if error_df is None or error_df.empty:
+                # Créer un DataFrame vide avec les bonnes colonnes
+                error_df = pd.DataFrame(columns=['ActionDate', 'MSISDN APT', 'MSISDN APE', 'Preview', 'Traduction'])
+            
+            error_df.to_excel(error_file, index=False)
+            print(f"SUCCESS: Fichier SMS_error créé - {error_file}")
+            log_error(f"Fichier SMS_error créé: {error_file} avec {len(error_df)} lignes")
+            return error_file
+        else:
+            return None
     except Exception as e:
         log_error(f"Échec de la sauvegarde des SMS en erreur: {e}")
         return None
@@ -314,6 +326,12 @@ def create_pb_format_sheet(wb, concat_df, ref_df):
     try:
         import openpyxl
         
+        # Vérifier que concat_df a les bonnes colonnes
+        if concat_df is None or concat_df.empty:
+            print("AVERTISSEMENT: concat_df est vide ou None dans create_pb_format_sheet")
+            log_error("concat_df vide dans create_pb_format_sheet", "AVERTISSEMENT")
+            return False
+        
         # Extraire tous les MSISDN uniques des colonnes APT et APE
         all_msisdns = set()
         
@@ -402,16 +420,35 @@ def create_accueil_sheet(wb, tp_df, concat_df):
         for cell in ws[1]:
             cell.font = openpyxl.styles.Font(bold=True)
         
+        # Vérifier que concat_df a les bonnes colonnes
+        if concat_df is None or concat_df.empty:
+            print("AVERTISSEMENT: concat_df est vide ou None dans create_accueil_sheet")
+            log_error("concat_df vide dans create_accueil_sheet", "AVERTISSEMENT")
+            return False
+        
+        # Vérifier les colonnes requises
+        required_cols = ['MSISDN APT', 'MSISDN APE']
+        for col in required_cols:
+            if col not in concat_df.columns:
+                print(f"AVERTISSEMENT: Colonne {col} manquante dans concat_df")
+                log_error(f"Colonne {col} manquante dans concat_df", "AVERTISSEMENT")
+                return False
+        
         # Analyser les SMS pour chaque membre du TP
         for _, tp_row in tp_df.iterrows():
             msisdn = str(tp_row['MSISDN'])
             identite = tp_row['Identité']
             
             # Filtrer les SMS où ce MSISDN apparaît (APT ou APE)
-            sms_filtered = concat_df[
-                (concat_df['MSISDN APT'].astype(str) == msisdn) |
-                (concat_df['MSISDN APE'].astype(str) == msisdn)
-            ]
+            try:
+                sms_filtered = concat_df[
+                    (concat_df['MSISDN APT'].astype(str) == msisdn) |
+                    (concat_df['MSISDN APE'].astype(str) == msisdn)
+                ]
+            except Exception as e:
+                print(f"ERREUR: Échec du filtrage pour MSISDN {msisdn} - {e}")
+                log_error(f"Échec du filtrage pour MSISDN {msisdn}: {e}", "ERREUR")
+                continue
             
             # Calculer les statistiques
             nb_sms = len(sms_filtered)
@@ -848,11 +885,15 @@ def run_pipeline():
     
     wb.save(output_file)
     
+    # Toujours créer un fichier SMS_error pour trace (même vide)
+    save_error_sms(None, ts, force_empty=True)
+    
     print("\n" + "=" * 60)
     print("PIPELINE TERMINE AVEC SUCCES")
     print(f"Fichier de sortie: {output_file}")
     if ERROR_LOG_FILE:
         print(f"Fichier de log: {ERROR_LOG_FILE}")
+    print(f"Fichier SMS_error: Error/SMS_error_{ts}.xlsx")
     print("=" * 60)
     
     log_error("PIPELINE TERMINE AVEC SUCCES", "INFO")
@@ -939,11 +980,15 @@ def run_from_existing_concat():
     
     wb.save(output_file)
     
+    # Toujours créer un fichier SMS_error pour trace (même vide)
+    save_error_sms(None, ts, force_empty=True)
+    
     print("\n" + "=" * 60)
     print("TRAITEMENT TERMINE AVEC SUCCES")
     print(f"Fichier de sortie: {output_file}")
     if ERROR_LOG_FILE:
         print(f"Fichier de log: {ERROR_LOG_FILE}")
+    print(f"Fichier SMS_error: Error/SMS_error_{ts}.xlsx")
     print("=" * 60)
     
     log_error("TRAITEMENT TERMINE AVEC SUCCES", "INFO")
