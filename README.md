@@ -66,6 +66,16 @@ Ce mode:
 - Dans ce cas, l'archivage est sauté (pas de fichiers à archiver)
 - Le traitement continue normalement avec les fonctions d'analyse (Accueil, PB_Format, coloration)
 
+**Mode silencieux (pour les grands jeux de données):**
+```bash
+python main.py --quiet
+# ou
+python main.py -q
+```
+- Réduit la verbosité de la sortie
+- Affiche la progression toutes les 5000 lignes au lieu de 1000
+- Utile pour les jeux de données de 10 000+ lignes
+
 Exemple:
 ```
 [2/5] Concaténation des fichiers Brutes...
@@ -73,6 +83,13 @@ AVERTISSEMENT: Dossier Brutes vide, recherche du dernier concat existant...
 Dernier concat trouvé: Concat/SMS_Concat_20240115_143022.xlsx
 
 [3/5] Archivage des fichiers Brutes: non nécessaire (mode analyse)
+[4/5] Chargement du fichier TP...
+SUCCESS: Fichier TP chargé (15 lignes)
+[5/5] Création des onglets, routing SMS, statistiques et formatage...
+Traitement de 10300 SMS...
+  Traité: 5000/10300 SMS...
+  Traité: 10000/10300 SMS...
+SUCCESS: Routing SMS terminé avec coloration
 ```
 
 ### 2. Traitement à partir du dernier concat existant

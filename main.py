@@ -26,6 +26,9 @@ except ImportError as e:
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 RED_FILL = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 
+# Contrôle de la verbosité
+VERBOSE = True
+
 # Configuration
 BRUTES_DIR = "Brutes"
 CONCAT_DIR = "Concat"
@@ -523,13 +526,20 @@ def route_sms(concat_file, tp_df, output_file):
         print(f"Mapping MSISDN -> Onglets: {len(msisdn_to_sheet)} entrées")
         print(f"MSISDN du TP: {len(all_tp_msisdns)} entrées")
         
+        # Précalculer le cache des MSISDN des onglets pour optimiser la coloration
+        sheet_msisdn_cache = {}
+        for msisdn, sheet_name in msisdn_to_sheet.items():
+            if " - " in sheet_name:
+                sheet_msisdn_cache[sheet_name] = sheet_name.split(" - ")[-1].strip()
+        
         # Parser chaque ligne et copier dans les onglets
         total_rows = len(df)
-        print(f"Traitement de {total_rows} SMS...")
+        if VERBOSE:
+            print(f"Traitement de {total_rows} SMS...")
         
         for idx, (_, row) in enumerate(df.iterrows(), start=1):
-            # Afficher la progression toutes les 1000 lignes
-            if idx % 1000 == 0:
+            # Afficher la progression toutes les 5000 lignes (moins verbeux)
+            if VERBOSE and idx % 5000 == 0:
                 print(f"  Traité: {idx}/{total_rows} SMS...")
             
             apt = str(row["MSISDN APT"])
@@ -551,8 +561,9 @@ def route_sms(concat_file, tp_df, output_file):
                 for col_idx, value in enumerate(row_data, start=1):
                     ws.cell(row=new_row, column=col_idx, value=value)
                 
-                # Appliquer la coloration pour cette ligne
-                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns)
+                # Appliquer la coloration pour cette ligne (avec cache)
+                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns, 
+                               sheet_msisdn_cache.get(sheet_name))
             
             # Écrire dans APE si différent et présent dans TP
             if ape in msisdn_to_sheet and ape != apt:
@@ -562,8 +573,9 @@ def route_sms(concat_file, tp_df, output_file):
                 for col_idx, value in enumerate(row_data, start=1):
                     ws.cell(row=new_row, column=col_idx, value=value)
                 
-                # Appliquer la coloration pour cette ligne
-                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns)
+                # Appliquer la coloration pour cette ligne (avec cache)
+                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns,
+                               sheet_msisdn_cache.get(sheet_name))
         
         wb.save(output_file)
         print(f"SUCCESS: Routing SMS terminé avec coloration - {output_file}")
@@ -575,7 +587,7 @@ def route_sms(concat_file, tp_df, output_file):
         return False, None
 
 
-def apply_coloration(ws, row_num, apt, ape, all_tp_msisdns):
+def apply_coloration(ws, row_num, apt, ape, all_tp_msisdns, sheet_msisdn_cache=None):
     """Appliquer la coloration aux cellules MSISDN de la ligne
     
     Args:
@@ -584,41 +596,38 @@ def apply_coloration(ws, row_num, apt, ape, all_tp_msisdns):
         apt: MSISDN APT de la ligne
         ape: MSISDN APE de la ligne
         all_tp_msisdns: Set de tous les MSISDN du TP
+        sheet_msisdn_cache: Cache optionnel pour le MSISDN de l'onglet
     """
     try:
         # Trouver les colonnes MSISDN APT et MSISDN APE (colonne 2 et 3)
         apt_col = 2  # MSISDN APT
         ape_col = 3  # MSISDN APE
         
-        # Extraire le MSISDN de l'onglet à partir du nom
-        # Format: "Identité - MSISDN"
-        sheet_msisdn = None
-        if " - " in ws.title:
-            sheet_msisdn = ws.title.split(" - ")[-1].strip()
-        
+        # Extraire le MSISDN de l'onglet à partir du nom (avec cache)
+        sheet_msisdn = sheet_msisdn_cache
         if sheet_msisdn is None:
-            return
+            if " - " in ws.title:
+                sheet_msisdn = ws.title.split(" - ")[-1].strip()
+            else:
+                return
         
         # Vérifier et colorer MSISDN APT
         apt_cell = ws.cell(row=row_num, column=apt_col)
         if str(apt) == str(sheet_msisdn):
-            # Jaune: correspond au MSISDN de l'onglet
             apt_cell.fill = YELLOW_FILL
         elif str(apt) in all_tp_msisdns:
-            # Rouge: autre MSISDN du TP
             apt_cell.fill = RED_FILL
         
         # Vérifier et colorer MSISDN APE
         ape_cell = ws.cell(row=row_num, column=ape_col)
         if str(ape) == str(sheet_msisdn):
-            # Jaune: correspond au MSISDN de l'onglet
             ape_cell.fill = YELLOW_FILL
         elif str(ape) in all_tp_msisdns:
-            # Rouge: autre MSISDN du TP
             ape_cell.fill = RED_FILL
             
     except Exception as e:
-        print(f"AVERTISSEMENT: Échec de la coloration - {e}")
+        if VERBOSE:
+            print(f"AVERTISSEMENT: Échec de la coloration - {e}")
 
 
 def format_dataframe(df):
@@ -942,9 +951,19 @@ def run_from_existing_concat():
 
 
 if __name__ == "__main__":
-    # Mode d'emploi
-    if len(sys.argv) > 1 and sys.argv[1] == "--from-existing":
-        success = run_from_existing_concat()
+    # Options de ligne de commande
+    VERBOSE = True  # Par défaut
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--from-existing":
+            success = run_from_existing_concat()
+        elif sys.argv[1] == "--quiet" or sys.argv[1] == "-q":
+            VERBOSE = False
+            if len(sys.argv) > 2 and sys.argv[2] == "--from-existing":
+                success = run_from_existing_concat()
+            else:
+                success = run_pipeline()
+        else:
+            success = run_pipeline()
     else:
         success = run_pipeline()
     
