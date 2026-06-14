@@ -73,23 +73,51 @@ python main.py --quiet
 python main.py -q
 ```
 - Réduit la verbosité de la sortie
-- Affiche la progression toutes les 5000 lignes au lieu de 1000
+- Affiche la progression toutes les 10 000 lignes au lieu de 5 000
 - Utile pour les jeux de données de 10 000+ lignes
 
-Exemple:
+**Mode sans coloration (plus rapide):**
+```bash
+python main.py --no-color
+# ou
+python main.py -nc
+```
+- Désactive la coloration des cellules (gain de performance)
+- Utile pour les jeux de données de 50 000+ lignes
+
+**Mode rapide (pour 100k+ lignes):**
+```bash
+python main.py --fast
+# ou
+python main.py -f
+```
+- Désactive la coloration **ET** la verbosité
+- Affiche la progression toutes les 20 000 lignes
+- **Recommandé pour 100 000+ lignes**
+
+**Combinaisons possibles:**
+```bash
+python main.py --fast --from-existing  # Mode rapide + dernier concat
+python main.py -f -q                     # Mode rapide + silencieux
+```
+
+Exemple avec 103 000 lignes:
 ```
 [2/5] Concaténation des fichiers Brutes...
-AVERTISSEMENT: Dossier Brutes vide, recherche du dernier concat existant...
-Dernier concat trouvé: Concat/SMS_Concat_20240115_143022.xlsx
 
-[3/5] Archivage des fichiers Brutes: non nécessaire (mode analyse)
+[3/5] Archivage des fichiers Brutes...
+
 [4/5] Chargement du fichier TP...
 SUCCESS: Fichier TP chargé (15 lignes)
 [5/5] Création des onglets, routing SMS, statistiques et formatage...
-Traitement de 10300 SMS...
-  Traité: 5000/10300 SMS...
-  Traité: 10000/10300 SMS...
-SUCCESS: Routing SMS terminé avec coloration
+Traitement de 103000 SMS...
+  Traité: 20000/103000 SMS...
+  Traité: 40000/103000 SMS...
+  Traité: 60000/103000 SMS...
+  Traité: 80000/103000 SMS...
+  Traité: 100000/103000 SMS...
+SUCCESS: Routing SMS terminé sans coloration
+  103000 SMS traités
 ```
 
 ### 2. Traitement à partir du dernier concat existant

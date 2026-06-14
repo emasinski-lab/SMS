@@ -26,8 +26,10 @@ except ImportError as e:
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 RED_FILL = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 
-# Contrôle de la verbosité
+# Contrôle de la verbosité et des performances
 VERBOSE = True
+COLORATION_ENABLED = True  # Désactiver pour les grands jeux de données
+PROGRESS_INTERVAL = 5000  # Lignes entre les messages de progression
 
 # Configuration
 BRUTES_DIR = "Brutes"
@@ -582,8 +584,8 @@ def route_sms(concat_file, tp_df, output_file, concat_df=None):
             print(f"Traitement de {total_rows} SMS...")
         
         for idx, (_, row) in enumerate(df.iterrows(), start=1):
-            # Afficher la progression toutes les 5000 lignes (moins verbeux)
-            if VERBOSE and idx % 5000 == 0:
+            # Afficher la progression selon l'intervalle configuré
+            if VERBOSE and PROGRESS_INTERVAL > 0 and idx % PROGRESS_INTERVAL == 0:
                 print(f"  Traité: {idx}/{total_rows} SMS...")
             
             apt = str(row["MSISDN APT"])
@@ -605,9 +607,10 @@ def route_sms(concat_file, tp_df, output_file, concat_df=None):
                 for col_idx, value in enumerate(row_data, start=1):
                     ws.cell(row=new_row, column=col_idx, value=value)
                 
-                # Appliquer la coloration pour cette ligne (avec cache)
-                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns, 
-                               sheet_msisdn_cache.get(sheet_name))
+                # Appliquer la coloration pour cette ligne (avec cache) si activée
+                if COLORATION_ENABLED:
+                    apply_coloration(ws, new_row, apt, ape, all_tp_msisdns, 
+                                   sheet_msisdn_cache.get(sheet_name))
             
             # Écrire dans APE si différent et présent dans TP
             if ape in msisdn_to_sheet and ape != apt:
@@ -617,12 +620,14 @@ def route_sms(concat_file, tp_df, output_file, concat_df=None):
                 for col_idx, value in enumerate(row_data, start=1):
                     ws.cell(row=new_row, column=col_idx, value=value)
                 
-                # Appliquer la coloration pour cette ligne (avec cache)
-                apply_coloration(ws, new_row, apt, ape, all_tp_msisdns,
-                               sheet_msisdn_cache.get(sheet_name))
+                # Appliquer la coloration pour cette ligne (avec cache) si activée
+                if COLORATION_ENABLED:
+                    apply_coloration(ws, new_row, apt, ape, all_tp_msisdns,
+                                   sheet_msisdn_cache.get(sheet_name))
         
         wb.save(output_file)
-        print(f"SUCCESS: Routing SMS terminé avec coloration - {output_file}")
+        coloration_status = "avec coloration" if COLORATION_ENABLED else "sans coloration"
+        print(f"SUCCESS: Routing SMS terminé {coloration_status} - {output_file}")
         print(f"  {total_rows} SMS traités")
         return True, df
         
@@ -1016,16 +1021,34 @@ def run_from_existing_concat():
 
 if __name__ == "__main__":
     # Options de ligne de commande
-    VERBOSE = True  # Par défaut
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--from-existing":
-            success = run_from_existing_concat()
-        elif sys.argv[1] == "--quiet" or sys.argv[1] == "-q":
-            VERBOSE = False
-            if len(sys.argv) > 2 and sys.argv[2] == "--from-existing":
+        # Réinitialiser les paramètres globaux
+        VERBOSE = True
+        COLORATION_ENABLED = True
+        PROGRESS_INTERVAL = 5000
+        
+        arg_index = 1
+        while arg_index < len(sys.argv):
+            arg = sys.argv[arg_index]
+            if arg == "--from-existing":
                 success = run_from_existing_concat()
+                break
+            elif arg == "--quiet" or arg == "-q":
+                VERBOSE = False
+                PROGRESS_INTERVAL = 10000
+                arg_index += 1
+            elif arg == "--no-color" or arg == "-nc":
+                COLORATION_ENABLED = False
+                arg_index += 1
+            elif arg == "--fast" or arg == "-f":
+                # Mode rapide: pas de coloration, progression toutes les 20k lignes
+                COLORATION_ENABLED = False
+                VERBOSE = False
+                PROGRESS_INTERVAL = 20000
+                arg_index += 1
             else:
                 success = run_pipeline()
+                break
         else:
             success = run_pipeline()
     else:
