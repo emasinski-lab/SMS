@@ -31,6 +31,8 @@ BRUTES_DIR = "Brutes"
 CONCAT_DIR = "Concat"
 ARCHIVE_DIR = "Brutes_archive"
 SORTIE_DIR = "Sortie"
+REFERENCE_DIR = "Reference"
+REFERENCE_FILE = os.path.join(REFERENCE_DIR, "msisdn_reference_v1.1.csv")
 TP_FILE = "TP/TP_test.xlsx"
 
 
@@ -40,6 +42,7 @@ def ensure_directories():
     os.makedirs(CONCAT_DIR, exist_ok=True)
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     os.makedirs(SORTIE_DIR, exist_ok=True)
+    os.makedirs(REFERENCE_DIR, exist_ok=True)
 
 
 def load_file(filepath):
@@ -235,6 +238,64 @@ def create_tp_sheets(tp_df, output_file):
     except Exception as e:
         print(f"ERREUR: Échec de la création des onglets TP - {e}")
         return None
+
+
+def create_pb_format_sheet(wb, concat_df, ref_df):
+    """Créer l'onglet PB_Format avec les MSISDN bruts et formatés
+    
+    Args:
+        wb: Workbook openpyxl
+        concat_df: DataFrame concaténé des SMS
+        ref_df: DataFrame du fichier de référence
+    """
+    try:
+        # Extraire tous les MSISDN uniques des colonnes APT et APE
+        all_msisdns = set()
+        
+        if 'MSISDN APT' in concat_df.columns:
+            all_msisdns.update(concat_df['MSISDN APT'].astype(str).unique())
+        if 'MSISDN APE' in concat_df.columns:
+            all_msisdns.update(concat_df['MSISDN APE'].astype(str).unique())
+        
+        # Supprimer les valeurs vides
+        all_msisdns = {m for m in all_msisdns if m and str(m).strip()}
+        
+        if not all_msisdns:
+            print("AVERTISSEMENT: Aucun MSISDN trouvé pour l'onglet PB_Format")
+            return False
+        
+        # Créer l'onglet PB_Format
+        if 'PB_Format' in wb.sheetnames:
+            ws = wb['PB_Format']
+        else:
+            ws = wb.create_sheet(title="PB_Format")
+        
+        # Écrire l'en-tête
+        headers = ["Donnée brute", "Donnée formatée"]
+        ws.append(headers)
+        
+        # Appliquer le style d'en-tête
+        for cell in ws[1]:
+            cell.font = openpyxl.styles.Font(bold=True)
+        
+        # Ajuster la largeur des colonnes
+        ws.column_dimensions['A'].width = 20
+        ws.column_dimensions['B'].width = 25
+        
+        # Trier les MSISDN pour un affichage cohérent
+        sorted_msisdns = sorted(all_msisdns)
+        
+        # Formater chaque MSISDN
+        for msisdn in sorted_msisdns:
+            formatted = format_msisdn(str(msisdn), ref_df)
+            ws.append([msisdn, formatted])
+        
+        print(f"SUCCESS: Onglet PB_Format créé avec {len(sorted_msisdns)} MSISDN")
+        return True
+        
+    except Exception as e:
+        print(f"ERREUR: Échec de la création de l'onglet PB_Format - {e}")
+        return False
 
 
 def create_accueil_sheet(wb, tp_df, concat_df):
@@ -482,6 +543,78 @@ def format_dataframe(df):
         return df
 
 
+def load_reference_file():
+    """Charger le fichier de référence des MSISDN"""
+    try:
+        if not os.path.exists(REFERENCE_FILE):
+            print(f"AVERTISSEMENT: Fichier de référence introuvable - {REFERENCE_FILE}")
+            return None
+        
+        ref_df = pd.read_csv(REFERENCE_FILE)
+        print(f"SUCCESS: Fichier de référence chargé ({len(ref_df)} entrées)")
+        return ref_df
+    except Exception as e:
+        print(f"AVERTISSEMENT: Échec du chargement du fichier de référence - {e}")
+        return None
+
+
+def format_msisdn(msisdn, ref_df):
+    """Formater un MSISDN selon le fichier de référence
+    
+    Args:
+        msisdn: MSISDN à formater (string)
+        ref_df: DataFrame du fichier de référence
+    
+    Returns:
+        str: MSISDN formaté ou "Pas de correspondance"
+    """
+    try:
+        if not isinstance(msisdn, str) or not msisdn.strip():
+            return "Pas de correspondance"
+        
+        # Nettoyer le MSISDN (enlever espaces, +, etc.)
+        clean_msisdn = msisdn.strip().replace(" ", "").replace("+", "").replace("-", "").replace("(", "").replace(")", "")
+        
+        if not clean_msisdn.isdigit():
+            return "Pas de correspondance"
+        
+        # Trouver le préfixe qui correspond
+        for _, row in ref_df.iterrows():
+            prefix = str(row['E164_prefixe_num'])
+            regex_sans_plus = row.get('regex_E164_sans_plus', '')
+            
+            # Vérifier si le MSISDN commence par ce préfixe
+            if clean_msisdn.startswith(prefix):
+                # Vérifier avec regex si disponible
+                if regex_sans_plus:
+                    import re
+                    if re.match(regex_sans_plus, clean_msisdn):
+                        # Formater en E.164: +<indicatif><numéro>
+                        indicatif = str(row['Indicatif'])
+                        return f"+{indicatif}{clean_msisdn[len(prefix):]}"
+                else:
+                    # Formater sans regex
+                    indicatif = str(row['Indicatif'])
+                    return f"+{indicatif}{clean_msisdn[len(prefix):]}"
+        
+        # Si aucun préfixe ne correspond, essayer de deviner le format
+        # en ajoutant un + devant si ce n'est pas déjà fait
+        if clean_msisdn.startswith('0'):
+            # Numéro local, on ne peut pas formater sans connaître le pays
+            return "Pas de correspondance"
+        
+        # Essayer de formater comme un numéro international
+        if len(clean_msisdn) >= 10:
+            # Supposer que c'est déjà un numéro international
+            return f"+{clean_msisdn}"
+        
+        return "Pas de correspondance"
+        
+    except Exception as e:
+        print(f"AVERTISSEMENT: Échec du formatage de {msisdn} - {e}")
+        return "Pas de correspondance"
+
+
 def get_latest_concat():
     """Récupérer le dernier fichier concaténé créé"""
     try:
@@ -534,8 +667,8 @@ def run_pipeline():
         print("ERREUR FATALE: Impossible de charger le fichier TP")
         return False
     
-    # Étape 5: Créer les onglets et router les SMS
-    print("\n[5/5] Création des onglets, routing SMS et statistiques...")
+    # Étape 5: Créer les onglets, routing SMS, statistiques et formatage
+    print("\n[5/5] Création des onglets, routing SMS, statistiques et formatage...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
@@ -556,12 +689,24 @@ def run_pipeline():
         print("ERREUR FATALE: Le routing SMS a échoué")
         return False
     
-    # Créer l'onglet Accueil avec les statistiques
+    # Charger le fichier de référence pour le formatage
+    ref_df = load_reference_file()
+    
+    # Créer les onglets Accueil et PB_Format
     wb = load_workbook(output_file)
+    
+    # Créer l'onglet Accueil avec les statistiques
     if not create_accueil_sheet(wb, tp_df, concat_df):
         print("AVERTISSEMENT: Impossible de créer l'onglet Accueil")
+    
+    # Créer l'onglet PB_Format
+    if ref_df is not None:
+        if not create_pb_format_sheet(wb, concat_df, ref_df):
+            print("AVERTISSEMENT: Impossible de créer l'onglet PB_Format")
     else:
-        wb.save(output_file)
+        print("AVERTISSEMENT: Fichier de référence non disponible, onglet PB_Format non créé")
+    
+    wb.save(output_file)
     
     print("\n" + "=" * 60)
     print("PIPELINE TERMINE AVEC SUCCES")
@@ -597,7 +742,7 @@ def run_from_existing_concat():
         return False
     
     # Créer les onglets et router les SMS
-    print("\n[3/3] Création des onglets, routing SMS et statistiques...")
+    print("\n[3/3] Création des onglets, routing SMS, statistiques et formatage...")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(SORTIE_DIR, f"TP_SMS_{ts}.xlsx")
     
@@ -618,12 +763,24 @@ def run_from_existing_concat():
         print("ERREUR FATALE: Le routing SMS a échoué")
         return False
     
-    # Créer l'onglet Accueil avec les statistiques
+    # Charger le fichier de référence pour le formatage
+    ref_df = load_reference_file()
+    
+    # Créer les onglets Accueil et PB_Format
     wb = load_workbook(output_file)
+    
+    # Créer l'onglet Accueil avec les statistiques
     if not create_accueil_sheet(wb, tp_df, concat_df):
         print("AVERTISSEMENT: Impossible de créer l'onglet Accueil")
+    
+    # Créer l'onglet PB_Format
+    if ref_df is not None:
+        if not create_pb_format_sheet(wb, concat_df, ref_df):
+            print("AVERTISSEMENT: Impossible de créer l'onglet PB_Format")
     else:
-        wb.save(output_file)
+        print("AVERTISSEMENT: Fichier de référence non disponible, onglet PB_Format non créé")
+    
+    wb.save(output_file)
     
     print("\n" + "=" * 60)
     print("TRAITEMENT TERMINE AVEC SUCCES")

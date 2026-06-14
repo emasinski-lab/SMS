@@ -12,6 +12,8 @@ SMS/
 │   └── sms_part_3.csv
 ├── TP/                      # Dossier du fichier TP
 │   └── TP_test.xlsx
+├── Reference/               # Dossier du fichier de référence
+│   └── msisdn_reference_v1.1.csv
 ├── Concat/                  # Dossier des fichiers concaténés (créé automatiquement)
 ├── Sortie/                  # Dossier des fichiers de sortie (créé automatiquement)
 ├── Brutes_archive/          # Archive des fichiers bruts (créé automatiquement)
@@ -154,6 +156,36 @@ Martin Carlos | 34612345678 | Non détecté | 0         | 0                     
 ```
 
 Cet onglet permet d'avoir **une vue d'ensemble** de l'activité SMS de chaque membre du TP.
+
+### Onglet PB_Format - Formatage des MSISDN
+
+Le fichier de sortie contient un **onglet "PB_Format"** qui permet de standardiser les numéros de téléphone selon le fichier de référence (`Reference/msisdn_reference_v1.1.csv`).
+
+| Colonne | Description |
+|---------|-------------|
+| **Donnée brute** | MSISDN tel qu'il apparaît dans les fichiers bruts |
+| **Donnée formatée** | MSISDN formaté selon la norme E.164 (`+<indicatif><numéro>`) ou "Pas de correspondance" |
+
+**Exemple:**
+```
+Donnée brute    | Donnée formatée
+---------------|------------------
+33612345678    | +33612345678
+4915234567890  | +4915234567890
+BANK-XYZ        | Pas de correspondance
+0612345678     | Pas de correspondance
+```
+
+**Fonctionnement:**
+- Le script utilise le fichier de référence pour identifier le pays et l'indicatif
+- Les numéros sont formatés selon la norme **E.164** (ex: `+33612345678` pour la France)
+- Si aucun format ne correspond (numéro local, format invalide, etc.), la valeur est "**Pas de correspondance**"
+- Les numéros locaux (commencant par 0) ne peuvent pas être formatés sans connaître le pays
+
+**Fichier de référence:**
+- Emplacement: `Reference/msisdn_reference_v1.1.csv`
+- Contient les préfixes, indicatifs et regex pour chaque pays
+- Peut être mis à jour sans modifier le script
 
 ## Gestion des erreurs
 
