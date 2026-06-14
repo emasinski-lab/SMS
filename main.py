@@ -51,6 +51,10 @@ def ensure_directories():
 def init_error_logging():
     """Initialiser le fichier de log des erreurs"""
     global ERROR_LOG_FILE
+    
+    # S'assurer que le répertoire Error existe
+    os.makedirs(ERROR_DIR, exist_ok=True)
+    
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     ERROR_LOG_FILE = os.path.join(ERROR_DIR, f"errorlog_{ts}.txt")
     
